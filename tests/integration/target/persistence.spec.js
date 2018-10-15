@@ -19,7 +19,7 @@ const {
   },
 } = require('./persistence')
 
-describe('./tests/integration/idioms/persistence', () => {
+describe('./tests/integration/target/persistence', () => {
   describe('#createParams', () => {
     const bucketName = 'slsart-integration-target-reqs'
     it('should set Bucket', () =>
