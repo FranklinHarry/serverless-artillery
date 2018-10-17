@@ -124,6 +124,11 @@ const pure = {
     return listNext
   },
 
+  rm: (unlink = fs.unlink) =>
+    path =>
+      new Promise(resolve =>
+        unlink(path, resolve)),
+
   rmrf: (listAll = pure.listAbsolutePathsRecursively(), rm = pure.rm()) =>
     directory =>
       listAll(directory)
