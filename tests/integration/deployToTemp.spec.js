@@ -2,72 +2,60 @@ const { assert: { strictEqual, deepStrictEqual, fail } } = require('chai')
 
 const {
   pure: {
-    execAsync,
-    listTargetFiles,
-    stageTarget,
+    mkdirp,
+    ls,
+    cp,
   },
 } = require('./deployToTemp')
 
-const condenseWhitespace = input =>
-  input.replace(/\s+/g, ' ')
+const missing = value =>
+  strictEqual(value, undefined)
+
+const values = (['directory', 'err', 'names'])
+  .reduce((result, key) => ({ [key]: { $: Symbol(key) }, ...result }), {})
+
+const isValue = valueName =>
+  actual => deepStrictEqual(actual, values[valueName])
+
+const mockback = (expected, ...result) =>
+  (...args) => {
+    const callback = args.pop()
+    deepStrictEqual(args, expected)
+    callback(...result)
+  }
 
 describe('./tests/integration/deployToTemp', () => {
-  describe('#execAsync', () => {
-    const values = (['command', 'options', 'err', 'stdout', 'stderr'])
-      .reduce((result, key) => ({ [key]: { $: Symbol(key) }, ...result }), {})
-    values.err.message = 'reasons'
-    values.stderr.toString = () => 'more reasons'
-    const execOk = (command, options, callback) =>
-      deepStrictEqual([command, options], [values.command, values.options]) ||
-      process.nextTick(() => callback(undefined, values.stdout, values.stderr))
-    const execFail = (command, options, callback) =>
-      deepStrictEqual([command, options], [values.command, values.options]) ||
-      process.nextTick(() => callback(values.err, values.stdout, values.stderr))
-    it('should return stdout on success', () =>
-      execAsync(execOk)(values.command, values.options)
-        .then(result => strictEqual(result, values.stdout)))
-    it('should reject on fail', () =>
-      execAsync(execFail)(values.command, values.options)
-        .then(
-          result => fail(result, '[Promise rejection]'),
-          err => strictEqual(err.message, 'reasons more reasons')
-        ))
+  describe('#mkdirp', () => {
+    const expectedOptions = { recursive: true }
+    const mkdirOk = mockback([values.directory, expectedOptions])
+    const mkdirFail = mockback([values.directory, expectedOptions], values.err)
+    it('should resolve empty on success', () =>
+      mkdirp(mkdirOk)(values.directory)
+        .then(missing))
+    it('should resolve with the error on fail', () =>
+      mkdirp(mkdirFail)(values.directory)
+        .then(err => deepStrictEqual(err, values.err)))
   })
 
-  describe('#listTargetFiles', () => {
-    const expectedCommand = "find serverless.yml *.js ! -name '*.spec.js*'"
-    const rawList = '\nfoo \n\tbar \n'
-    const expectedList = ['foo', 'bar']
-    const execOk = command =>
-      strictEqual(command, expectedCommand) ||
-      Promise.resolve(rawList)
-    const error = new Error('reasons')
-    const execFail = () => Promise.reject(error)
-    it('should return a clean list of target files', () =>
-      listTargetFiles(execOk)()
-        .then(list => deepStrictEqual(list, expectedList)))
-    it('should should pass through on fail', () =>
-      listTargetFiles(execFail)()
-        .catch(err => err)
-        .then(err => strictEqual(err, error)))
+  describe('#ls', () => {
+    const readdirOk = mockback([values.directory], undefined, values.names)
+    const readdirFail = mockback([values.directory], values.err)
+    it('should resolve names on success', () =>
+      ls(readdirOk)(values.directory).then(isValue('names')))
+    it('should resolve empty array on fail', () =>
+      ls(readdirFail)(values.directory)
+        .then(names => deepStrictEqual(names, [])))
   })
 
-  describe('#stageTarget', () => {
-    const destination = 'dest'
-    const fileList = ['foo', 'bar']
-    const instanceId = 'ABCD'
-    const expectedCommand =
-      'mkdir -p dest && cp foo bar dest && echo "instanceId: ABCD" >> dest/config.yml'
-    const execOk = command =>
-      strictEqual(condenseWhitespace(command), expectedCommand) ||
-      Promise.resolve()
-    const error = new Error('reasons')
-    const execFail = () => Promise.reject(error)
-    it('should return a clean list of target files', () =>
-      stageTarget(execOk)(destination, fileList, instanceId))
-    it('should should pass through on fail', () =>
-      stageTarget(execFail)(destination, fileList, instanceId)
-        .catch(err => err)
-        .then(err => strictEqual(err, error)))
+  describe('#cp', () => {
+    const copyFileOk = mockback([values.source, values.destination])
+    const copyFileFail =
+      mockback([values.source, values.destination], values.err)
+    it('should resolve empty on success', () =>
+      cp(copyFileOk)(values.destination)(values.source)
+        .then(missing))
+    it('should resolve with the error on fail', () =>
+      cp(copyFileFail)(values.destination)(values.source)
+        .then(err => deepStrictEqual(err, values.err)))
   })
 })
