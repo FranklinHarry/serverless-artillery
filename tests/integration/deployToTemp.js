@@ -4,11 +4,9 @@ const childProcess = require('child_process')
 const fs = require('fs')
 
 const { randomString } = require('./target/handler')
-const { pipe, tap } = require('./target/fn')
 
 const defaultSourcePath = join(__dirname, 'target')
 const defaultRoot = join(tmpdir(), 'slsart-integration')
-const defaultSeparator = '-'.repeat(process.stdout.columns)
 
 const flatten = values =>
   values.reduce((flattened, value) =>
