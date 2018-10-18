@@ -1,17 +1,22 @@
-const { assert: { strictEqual, deepStrictEqual, fail } } = require('chai')
+const { assert: { strictEqual, deepStrictEqual } } = require('chai')
+const { sep } = require('path')
 
 const {
   pure: {
     mkdirp,
     ls,
     cp,
+    namesToFullPaths,
+    filterOutSpecFiles,
+    findTargetSourceFiles,
+    sourceFileNameTo,
   },
 } = require('./deployToTemp')
 
 const missing = value =>
   strictEqual(value, undefined)
 
-const values = (['directory', 'err', 'names'])
+const values = (['directory', 'err', 'names', 'sourcePath'])
   .reduce((result, key) => ({ [key]: { $: Symbol(key) }, ...result }), {})
 
 const isValue = valueName =>
@@ -57,5 +62,38 @@ describe('./tests/integration/deployToTemp', () => {
     it('should resolve with the error on fail', () =>
       cp(copyFileFail)(values.destination)(values.source)
         .then(err => deepStrictEqual(err, values.err)))
+  })
+
+  describe('#namesToFullPaths', () => {
+    const directory = 'biz'
+    const names = ['foo', 'bar']
+    const expected = [`biz${sep}foo`, `biz${sep}bar`]
+    it('should join names to the base path', () =>
+      deepStrictEqual(namesToFullPaths(directory)(names), expected))
+  })
+
+  describe('#filterOutSpecFiles', () => {
+    const names = ['foo.js', 'foo.spec.js']
+    const expected = [names[0]]
+    it('should filter out spec files', () =>
+      deepStrictEqual(filterOutSpecFiles(names), expected))
+  })
+
+  describe('#findTargetSourceFiles', () => {
+    const sourcePath = 'foo'
+    const names = ['bar.js', 'bar.spec.js']
+    const expected = [`foo${sep}bar.js`]
+    const lsOk = path => Promise.resolve(path === sourcePath ? names : [])
+    it('should resolve to target source file full paths', () =>
+      findTargetSourceFiles(lsOk, sourcePath)()
+        .then(fullPaths => deepStrictEqual(fullPaths, expected)))
+  })
+
+  describe('#sourceFileNameTo', () => {
+    it('should re-root the source file path to the destination path', () =>
+      strictEqual(
+        sourceFileNameTo('foo')(`bar${sep}baz.js`),
+        `foo${sep}baz.js`
+      ))
   })
 })

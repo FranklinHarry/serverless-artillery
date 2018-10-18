@@ -36,13 +36,13 @@ const pure = {
     names =>
       names.map(name => join(directory, name)),
 
-  filterNames: names =>
+  filterOutSpecFiles: names =>
     names.filter(name => !name.endsWith('.spec.js')),
 
   findTargetSourceFiles: (ls = pure.ls(), sourcePath = defaultSourcePath) =>
     () =>
       ls(sourcePath)
-        .then(pure.filterNames)
+        .then(pure.filterOutSpecFiles)
         .then(pure.namesToFullPaths(sourcePath)),
 
   sourceFileNameTo: destination =>
