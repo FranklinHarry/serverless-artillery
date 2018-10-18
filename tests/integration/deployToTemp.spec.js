@@ -10,6 +10,8 @@ const {
     filterOutSpecFiles,
     findTargetSourceFiles,
     sourceFileNameTo,
+    copyTofolder,
+    copyAll,
   },
 } = require('./deployToTemp')
 
@@ -95,5 +97,32 @@ describe('./tests/integration/deployToTemp', () => {
         sourceFileNameTo('foo')(`bar${sep}baz.js`),
         `foo${sep}baz.js`
       ))
+  })
+
+  describe('#copyTofolder', () => {
+    const filePath = `foo${sep}first.js`
+    const destination = 'bar'
+    const expectedCpArgs = [`bar${sep}first.js`, filePath]
+    const cpOk = destinationFile =>
+      sourceFile =>
+        deepStrictEqual([destinationFile, sourceFile], expectedCpArgs) ||
+          Promise.resolve()
+    it('should copy a source file to the destination folder', () =>
+      copyTofolder(cpOk)(destination)(filePath)
+        .then(missing)
+    )
+  })
+
+  describe('#copyAll', () => {
+    const destination = 'bar'
+    const sourceFiles = [`foo${sep}first.js`, `foo${sep}second.js`]
+    const expectedSourceFiles = [...sourceFiles]
+    const copyTofolderOk = directory =>
+      strictEqual(directory, destination) || (actual =>
+        strictEqual(actual, expectedSourceFiles.shift()) || Promise.resolve())
+    it('should copy all source files to the destination directory', () =>
+      copyAll(copyTofolderOk)(destination)(sourceFiles)
+        .then(() => strictEqual(expectedSourceFiles.length, 0))
+        .then(missing))
   })
 })

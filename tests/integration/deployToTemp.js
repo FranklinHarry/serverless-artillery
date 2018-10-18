@@ -49,13 +49,17 @@ const pure = {
     sourceFileName =>
       join(destination, basename(sourceFileName)),
 
-  copyAll: (cp = pure.cp()) =>
+  copyTofolder: (cp = pure.cp()) =>
+    (destination) => {
+      const toDestination = pure.sourceFileNameTo(destination)
+      return filePath =>
+        cp(toDestination(filePath))(filePath)
+    },
+
+  copyAll: (copyTofolder = pure.copyTofolder()) =>
     destination =>
       sourceFiles =>
-        Promise.all(sourceFiles
-          .map(pure.sourceFileNameTo(destination))
-          .map(cp(destination))
-        ),
+        Promise.all(sourceFiles.map(copyTofolder(destination))),
 
   writeFile: (writeFile = fs.writeFile) =>
     (destination, data) =>
