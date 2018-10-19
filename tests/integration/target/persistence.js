@@ -69,21 +69,22 @@ const pure = {
     (key, object) =>
       writeFile(key, JSON.stringify(object)),
 
-  deleteObjects: (deleteFiles, listFiles) =>
-    (prefix) => {
-      const deleteNext = (getNext, count) =>
-        (getNext
-          ? getNext()
-            .then(({ keys, next }) =>
-              deleteFiles(keys)
-                .then(({ ok, errors }) => {
-                  if (ok) return
-                  throw new Error(`Failed to delete files: ${JSON.stringify(errors)}`)
-                })
-                .then(() => deleteNext(next, count + keys.length)))
-          : count)
+  deleteObjects: (deleteFiles, listFiles) => {
+    const deleteNextBatch = (deleteNext, count) =>
+      ({ keys, next }) =>
+        deleteFiles(keys)
+          .then(({ ok, errors }) => {
+            if (ok) return
+            throw new Error(`Failed to delete files: ${JSON.stringify(errors)}`)
+          })
+          .then(() => deleteNext(next, count + keys.length))
+    return (prefix) => {
+      const deleteNext = (getNext, count) => (getNext
+        ? getNext().then(deleteNextBatch(deleteNext, count))
+        : count)
       deleteNext(() => listFiles(prefix), 0)
-    },
+    }
+  },
 
   streamObjects: (listFiles, readObject) =>
     (prefix, callback, { maxConcurrentDownloads = 4 } = {}) => {
