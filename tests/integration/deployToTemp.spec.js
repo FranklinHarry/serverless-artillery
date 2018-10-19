@@ -14,13 +14,23 @@ const {
     copyAll,
     writeFile,
     writeConfig,
+    stageTarget,
   },
 } = require('./deployToTemp')
 
 const missing = value =>
   strictEqual(value, undefined)
 
-const values = (['directory', 'err', 'names', 'sourcePath', 'destination', 'data'])
+const values = ([
+  'directory',
+  'err',
+  'names',
+  'sourcePath',
+  'destination',
+  'data',
+  'result',
+  'instanceId',
+])
   .reduce((result, key) => ({ [key]: { $: Symbol(key) }, ...result }), {})
 
 const isValue = valueName =>
@@ -147,5 +157,31 @@ describe('./tests/integration/deployToTemp', () => {
       deepStrictEqual([destination, data], [values.destination, expectedData])
     it('should write the yaml instance id', () =>
       writeConfig(writeFileOk)(values.destination, instanceId))
+  })
+
+  describe('#stageTarget', () => {
+    const sourceFiles = ['foo/first.js', 'foo/second.js']
+    const findTargetSourceFilesOk = () => Promise.resolve(sourceFiles)
+    const copyAllOk = destination =>
+      files =>
+        deepStrictEqual([destination, files], [values.destination, sourceFiles])
+        || Promise.resolve(values.result)
+    const writeConfigOk = (destination, instanceId) =>
+      previous =>
+        deepStrictEqual(
+          [previous, destination, instanceId],
+          [values.result, values.destination, values.instanceId]
+        ) || Promise.resolve()
+    const writeConfigFail = () =>
+      () => Promise.reject(values.err)
+    const stageTargetOk =
+      stageTarget(findTargetSourceFilesOk, copyAllOk, writeConfigOk)
+    const stageTargetFail =
+      stageTarget(findTargetSourceFilesOk, copyAllOk, writeConfigFail)
+    it('should copy all source files and write config', () =>
+      stageTargetOk(values.destination, values.instanceId))
+    it('should reject on failure to write config', () =>
+      stageTargetFail(values.destination, values.instanceId)
+        .then(() => fail('should reject'), isValue('err')))
   })
 })
