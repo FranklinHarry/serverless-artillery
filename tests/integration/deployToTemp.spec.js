@@ -1,4 +1,4 @@
-const { assert: { strictEqual, deepStrictEqual } } = require('chai')
+const { assert: { strictEqual, deepStrictEqual, fail } } = require('chai')
 const { sep } = require('path')
 
 const {
@@ -12,13 +12,15 @@ const {
     sourceFileNameTo,
     copyTofolder,
     copyAll,
+    writeFile,
+    writeConfig,
   },
 } = require('./deployToTemp')
 
 const missing = value =>
   strictEqual(value, undefined)
 
-const values = (['directory', 'err', 'names', 'sourcePath'])
+const values = (['directory', 'err', 'names', 'sourcePath', 'destination', 'data'])
   .reduce((result, key) => ({ [key]: { $: Symbol(key) }, ...result }), {})
 
 const isValue = valueName =>
@@ -124,5 +126,26 @@ describe('./tests/integration/deployToTemp', () => {
       copyAll(copyTofolderOk)(destination)(sourceFiles)
         .then(() => strictEqual(expectedSourceFiles.length, 0))
         .then(missing))
+  })
+
+  describe('#writeFile', () => {
+    const writeFileArgs = [values.destination, values.data]
+    const writeFileOk = mockback(writeFileArgs)
+    const writeFileFail = mockback(writeFileArgs, values.err)
+    it('should resolve empty on success', () =>
+      writeFile(writeFileOk)(values.destination, values.data)
+        .then(missing))
+    it('should reject with the error on fail', () =>
+      writeFile(writeFileFail)(values.destination, values.data)
+        .then(() => fail('should reject'), isValue('err')))
+  })
+
+  describe('#writeConfig', () => {
+    const instanceId = 1234
+    const expectedData = 'instanceId: 1234'
+    const writeFileOk = (destination, data) =>
+      deepStrictEqual([destination, data], [values.destination, expectedData])
+    it('should write the yaml instance id', () =>
+      writeConfig(writeFileOk)(values.destination, instanceId))
   })
 })
