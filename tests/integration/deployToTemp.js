@@ -83,12 +83,15 @@ const pure = {
         .then(copyAll(destination))
         .then(writeConfig(destination, instanceId)),
 
-  execAsync: (exec = childProcess.exec) =>
+  execError: (err, stderr) =>
+    new Error(`${err.message} ${stderr}`),
+
+  execAsync: (exec = childProcess.exec, execError = pure.execError) =>
     (command, options = {}) =>
       new Promise((resolve, reject) =>
         exec(command, options, (err, stdout, stderr) =>
           (err
-            ? reject(new Error(`${err.message} ${stderr}`))
+            ? reject(execError(err, stderr))
             : resolve(stdout)))),
 
   deploy: (exec = pure.execAsync) =>

@@ -15,6 +15,9 @@ const {
     writeFile,
     writeConfig,
     stageTarget,
+    execError,
+    execAsync,
+    deploy,
   },
 } = require('./deployToTemp')
 
@@ -30,6 +33,10 @@ const values = ([
   'data',
   'result',
   'instanceId',
+  'stdout',
+  'stderr',
+  'command',
+  'options',
 ])
   .reduce((result, key) => ({ [key]: { $: Symbol(key) }, ...result }), {})
 
@@ -183,5 +190,44 @@ describe('./tests/integration/deployToTemp', () => {
     it('should reject on failure to write config', () =>
       stageTargetFail(values.destination, values.instanceId)
         .then(() => fail('should reject'), isValue('err')))
+  })
+
+  describe('#execError', () => {
+    const err = { message: 'foo' }
+    const stderr = 'bar'
+    it('should include error message and stderr', () =>
+      strictEqual(execError(err, stderr).message, 'foo bar'))
+  })
+
+  describe('#execAsync', () => {
+    const execOk = mockback(
+      [values.command, values.options],
+      undefined, values.stdout
+    )
+    const execFail = mockback(
+      [values.command, values.options],
+      values.err, undefined, values.stderr
+    )
+    const execArgs = [values.command, values.options]
+    const expectedError = new Error()
+    const execErrorOk = (...args) =>
+      deepStrictEqual(args, [values.err, values.stderr]) || expectedError
+    it('should resolve to stdout', () =>
+      execAsync(execOk)(...execArgs)
+        .then(isValue('stdout')))
+    it('should reject on fail', () =>
+      execAsync(execFail, execErrorOk)(...execArgs)
+        .then(
+          () => fail('should reject'),
+          err => strictEqual(err, expectedError)
+        ))
+  })
+
+  describe('#deploy', () => {
+    const execAsyncOk = (...args) =>
+      deepStrictEqual(args, ['sls deploy', { cwd: values.directory }]) ||
+        Promise.resolve()
+    it('should sls deploy in the given directory', () =>
+      deploy(execAsyncOk)(values.directory))
   })
 })
