@@ -115,7 +115,10 @@ const pure = {
         .then(() => stageTarget(destination, instanceId))
         .then(() => log('deploying', destination))
         .then(() => deploy(destination))
-        .catch(err => warn('failed to deploy a new target:', err.stack)),
+        .then(
+          () => true,
+          err => warn('failed to deploy a new target:', err.stack) || false
+        ),
 
   remove: (exec = pure.execAsync) =>
     directory =>

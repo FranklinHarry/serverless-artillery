@@ -18,6 +18,8 @@ const {
     execError,
     execAsync,
     deploy,
+    tempLocation,
+    deployNewTarget,
   },
 } = require('./deployToTemp')
 
@@ -49,6 +51,27 @@ const mockback = (expected, ...result) =>
     deepStrictEqual(args, expected)
     callback(...result)
   }
+
+// Takes an array of function calls where each call is in the form
+//  [name, [args], returnValue]. Returns an object of mocks in the form
+//  { functionName: () => {...}, ... }.
+const sequence = (functions) => {
+  const expected = [...functions]
+  const mock = name =>
+    (...args) => {
+      const [expectedName, expectedArgs, returnValue] = expected.shift()
+      deepStrictEqual([name, args], [expectedName, expectedArgs])
+      return returnValue
+    }
+  return functions.reduce(
+    (mocks, [name]) => (mocks[name]
+      ? mocks
+      : Object.assign({},
+        mocks,
+        { [name]: mock(name) })),
+    {}
+  )
+}
 
 describe('./tests/integration/deployToTemp', () => {
   describe('#mkdirp', () => {
@@ -227,7 +250,71 @@ describe('./tests/integration/deployToTemp', () => {
     const execAsyncOk = (...args) =>
       deepStrictEqual(args, ['sls deploy', { cwd: values.directory }]) ||
         Promise.resolve()
+    const error = new Error()
+    const execAsyncFail = () => Promise.reject(error)
     it('should sls deploy in the given directory', () =>
       deploy(execAsyncOk)(values.directory))
+    it('should pass through exec rejection', () =>
+      deploy(execAsyncFail)()
+        .then(() => fail('should reject'), err => strictEqual(err, error)))
+  })
+
+  describe('#tempLocation', () => {
+    const instanceId = '123'
+    const root = 'abc'
+    const destination = `abc${sep}123`
+    it('should join the root path and instance id', () =>
+      deepStrictEqual(
+        tempLocation(instanceId, root),
+        { instanceId, destination }
+      ))
+  })
+
+  describe('#deployNewTarget', () => {
+    const error = new Error()
+    const is = expected => value => strictEqual(value, expected)
+    const deployNewTargetWithMockSequence = (mockSequence) => {
+      const mocks = sequence(mockSequence)
+      return deployNewTarget(
+        values, // provides { instanceId, destination }
+        mocks.mkdirp,
+        mocks.stageTarget,
+        mocks.deploy,
+        mocks.log,
+        mocks.warn
+      )()
+    }
+    it('should resolve after making directory, staging and deploying', () =>
+      deployNewTargetWithMockSequence([
+        ['mkdirp', [values.destination], Promise.resolve()],
+        ['log', ['staging target', values.instanceId, 'to', values.destination]],
+        ['stageTarget', [values.destination, values.instanceId], Promise.resolve()],
+        ['log', ['deploying', values.destination]],
+        ['deploy', [values.destination], Promise.resolve(values.stdout)],
+      ]).then(is(true)))
+    it('should continue staging/deploying and resolve after failing to make dir', () =>
+      deployNewTargetWithMockSequence([
+        ['mkdirp', [values.destination], Promise.resolve(error)],
+        ['log', ['staging target', values.instanceId, 'to', values.destination]],
+        ['stageTarget', [values.destination, values.instanceId], Promise.resolve()],
+        ['log', ['deploying', values.destination]],
+        ['deploy', [values.destination], Promise.resolve(values.stdout)],
+      ]).then(is(true)))
+    it('should reject when failing to stage target', () =>
+      deployNewTargetWithMockSequence([
+        ['mkdirp', [values.destination], Promise.resolve()],
+        ['log', ['staging target', values.instanceId, 'to', values.destination]],
+        ['stageTarget', [values.destination, values.instanceId], Promise.reject(error)],
+        ['warn', ['failed to deploy a new target:', error.stack]],
+      ]).then(is(false)))
+    it('should reject when failing to deploy', () =>
+      deployNewTargetWithMockSequence([
+        ['mkdirp', [values.destination], Promise.resolve()],
+        ['log', ['staging target', values.instanceId, 'to', values.destination]],
+        ['stageTarget', [values.destination, values.instanceId], Promise.resolve()],
+        ['log', ['deploying', values.destination]],
+        ['deploy', [values.destination], Promise.reject(error)],
+        ['warn', ['failed to deploy a new target:', error.stack]],
+      ]).then(is(false)))
   })
 })
