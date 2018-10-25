@@ -154,8 +154,8 @@ const pure = {
         .catch(err => warn('failed to sls remove', directory, ':', err.stack))
         .then(() => rmrf(directory)),
 
-  listTempDeployments: (ls = pure.ls(), root = defaultRoot) =>
-    () =>
+  listTempDeployments: (ls = pure.ls()) =>
+    root =>
       ls(root)
         .then(directories =>
           directories.map(directory => join(root, directory))),
@@ -163,7 +163,8 @@ const pure = {
   cleanupDeployments: (
     list = pure.listTempDeployments(),
     remove = pure.removeTempDeployment(),
-    log = console.log
+    log = console.log,
+    root = defaultRoot
   ) =>
     () =>
       log('cleaning up deployments in', root) || list()

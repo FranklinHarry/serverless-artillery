@@ -24,6 +24,9 @@ const {
     listAbsolutePathsRecursively,
     rm,
     rmrf,
+    removeTempDeployment,
+    listTempDeployments,
+    cleanupDeployments,
   },
 } = require('./deployToTemp')
 
@@ -68,7 +71,7 @@ const sequence = (functions) => {
   const mock = name =>
     (...args) => {
       const [expectedName, expectedArgs, returnValue] = expected.shift()
-      deepStrictEqual([name, args], [expectedName, expectedArgs])
+      deepStrictEqual([name, args], [expectedName, expectedArgs || []])
       return returnValue
     }
   return functions.reduce(
@@ -396,5 +399,64 @@ describe('./tests/integration/deployToTemp', () => {
       rmrf(listAllOk, rmOk)(values.directory)
         .then(removed => [...removed].sort())
         .then(deepStrictEqualTo([...files, values.directory].sort())))
+  })
+
+  describe('#removeTempDeployment', () => {
+    const removeTempDeploymentWithMockSequence = (mockSequence) => {
+      const mocks = sequence(mockSequence)
+      return removeTempDeployment(
+        mocks.log,
+        mocks.remove,
+        mocks.warn,
+        mocks.rmrf
+      )(values.directory)
+    }
+    const error = new Error()
+    it('should resolve and log on successful remove and rmrf', () =>
+      removeTempDeploymentWithMockSequence([
+        ['log', ['removing temp deployment', values.directory]],
+        ['remove', [values.directory], Promise.resolve(values.stdout)],
+        ['rmrf', [values.directory], Promise.resolve(values.directory)],
+      ])
+        .then(isValue('directory')))
+    it('should warn and resolve on unsuccessful remove and rmrf', () =>
+      removeTempDeploymentWithMockSequence([
+        ['log', ['removing temp deployment', values.directory]],
+        ['remove', [values.directory], Promise.reject(error)],
+        ['warn', ['failed to sls remove', values.directory, ':', error.stack]],
+        ['rmrf', [values.directory], Promise.resolve(values.directory)],
+      ])
+        .then(isValue('directory')))
+  })
+
+  describe('#listTempDeployments', () => {
+    const root = 'foo'
+    const directories = ['first', 'second']
+    const lsOk = directory =>
+      strictEqual(directory, root) || Promise.resolve(directories)
+    it('should list all directories in the root path', () =>
+      listTempDeployments(lsOk)(root)
+        .then(deepStrictEqualTo([`foo${sep}first`, `foo${sep}second`])))
+  })
+
+  describe('#cleanupDeployments', () => {
+    const root = 'temp'
+    const cleanupDeploymentsWithMockSequence = (mockSequence) => {
+      const mocks = sequence(mockSequence)
+      return cleanupDeployments(
+        mocks.list,
+        mocks.remove,
+        mocks.log,
+        root
+      )()
+    }
+    const directories = ['foo', 'bar']
+    it('should resolve after logging, listing and removing each deployment', () =>
+      cleanupDeploymentsWithMockSequence([
+        ['log', ['cleaning up deployments in', root]],
+        ['list', [], Promise.resolve(directories)],
+        ['remove', ['foo'], Promise.resolve()],
+        ['remove', ['bar'], Promise.resolve()],
+      ]))
   })
 })
