@@ -115,10 +115,9 @@ const pure = {
         .then(() => stageTarget(destination, instanceId))
         .then(() => log('deploying', destination))
         .then(() => deploy(destination))
-        .then(
-          () => true,
-          err => warn('failed to deploy a new target:', err.stack) || false
-        ),
+        .then(() => true)
+        .catch(err =>
+          warn('failed to deploy a new target:', err.stack) || false),
 
   remove: (exec = pure.execAsync) =>
     directory =>
@@ -128,9 +127,8 @@ const pure = {
     const listNext = directory =>
       ls(directory)
         .then(files => files.map(file => join(directory, file)))
-        .then(files => ({ files, children: Promise.all(files.map(listNext)) }))
-        .then(({ files, children }) =>
-          [...flatten(children), ...files, directory])
+        .then(files => Promise.all(files.map(listNext)))
+        .then(children => [...flatten(children), directory])
     return listNext
   },
 

@@ -20,6 +20,10 @@ const {
     deploy,
     tempLocation,
     deployNewTarget,
+    remove,
+    listAbsolutePathsRecursively,
+    rm,
+    rmrf,
   },
 } = require('./deployToTemp')
 
@@ -41,6 +45,10 @@ const values = ([
   'options',
 ])
   .reduce((result, key) => ({ [key]: { $: Symbol(key) }, ...result }), {})
+
+const strictEqualTo = expected => value => strictEqual(value, expected)
+
+const deepStrictEqualTo = expected => value => deepStrictEqual(value, expected)
 
 const isValue = valueName =>
   actual => deepStrictEqual(actual, values[valueName])
@@ -272,7 +280,6 @@ describe('./tests/integration/deployToTemp', () => {
 
   describe('#deployNewTarget', () => {
     const error = new Error()
-    const is = expected => value => strictEqual(value, expected)
     const deployNewTargetWithMockSequence = (mockSequence) => {
       const mocks = sequence(mockSequence)
       return deployNewTarget(
@@ -291,7 +298,7 @@ describe('./tests/integration/deployToTemp', () => {
         ['stageTarget', [values.destination, values.instanceId], Promise.resolve()],
         ['log', ['deploying', values.destination]],
         ['deploy', [values.destination], Promise.resolve(values.stdout)],
-      ]).then(is(true)))
+      ]).then(strictEqualTo(true)))
     it('should continue staging/deploying and resolve after failing to make dir', () =>
       deployNewTargetWithMockSequence([
         ['mkdirp', [values.destination], Promise.resolve(error)],
@@ -299,14 +306,14 @@ describe('./tests/integration/deployToTemp', () => {
         ['stageTarget', [values.destination, values.instanceId], Promise.resolve()],
         ['log', ['deploying', values.destination]],
         ['deploy', [values.destination], Promise.resolve(values.stdout)],
-      ]).then(is(true)))
+      ]).then(strictEqualTo(true)))
     it('should reject when failing to stage target', () =>
       deployNewTargetWithMockSequence([
         ['mkdirp', [values.destination], Promise.resolve()],
         ['log', ['staging target', values.instanceId, 'to', values.destination]],
         ['stageTarget', [values.destination, values.instanceId], Promise.reject(error)],
         ['warn', ['failed to deploy a new target:', error.stack]],
-      ]).then(is(false)))
+      ]).then(strictEqualTo(false)))
     it('should reject when failing to deploy', () =>
       deployNewTargetWithMockSequence([
         ['mkdirp', [values.destination], Promise.resolve()],
@@ -315,6 +322,79 @@ describe('./tests/integration/deployToTemp', () => {
         ['log', ['deploying', values.destination]],
         ['deploy', [values.destination], Promise.reject(error)],
         ['warn', ['failed to deploy a new target:', error.stack]],
-      ]).then(is(false)))
+      ]).then(strictEqualTo(false)))
+  })
+
+  describe('#remove', () => {
+    const execAsyncOk = (...args) =>
+      deepStrictEqual(args, ['sls remove', { cwd: values.directory }]) ||
+        Promise.resolve()
+    const error = new Error()
+    const execAsyncFail = () => Promise.reject(error)
+    it('should sls deploy in the given directory', () =>
+      remove(execAsyncOk)(values.directory))
+    it('should pass through exec rejection', () =>
+      remove(execAsyncFail)()
+        .then(() => fail('should reject'), err => strictEqual(err, error)))
+  })
+
+  describe('#listAbsolutePathsRecursively', () => {
+    const mockLs = fileSystem =>
+      (basePath) => {
+        const dir = basePath.split(sep).reduce(
+          (fileSystemPart, pathPart) => fileSystemPart[pathPart],
+          fileSystem
+        )
+        return Promise.resolve(Object.keys(dir))
+      }
+    const rootPath = 'foo'
+    const assertPathsListedRecursively = (fileSystem, expected) => {
+      const rootedFileSystem = { [rootPath]: fileSystem }
+      return listAbsolutePathsRecursively(mockLs(rootedFileSystem))(rootPath)
+        .then(paths => [...paths].sort())
+        .then(deepStrictEqualTo([...expected].sort()))
+    }
+    it('resolves to only the root path when no sub-files exist', () =>
+      assertPathsListedRecursively({}, [rootPath]))
+    it('resolves to the root path and nested child paths', () =>
+      assertPathsListedRecursively(
+        {
+          l1a: {
+            l2a: {},
+            l2b: {},
+          },
+          l2a: {},
+        },
+        [
+          rootPath,
+          [rootPath, 'l1a'].join(sep),
+          [rootPath, 'l1a', 'l2a'].join(sep),
+          [rootPath, 'l1a', 'l2b'].join(sep),
+          [rootPath, 'l2a'].join(sep),
+        ]
+      ))
+  })
+
+  describe('#rm', () => {
+    const unlinkOk = mockback([values.directory])
+    const unlinkFail =
+      mockback([values.directory], values.err)
+    it('should resolve empty on success', () =>
+      rm(unlinkOk)(values.directory)
+        .then(missing))
+    it('should resolve with the error on fail', () =>
+      rm(unlinkFail)(values.directory)
+        .then(err => deepStrictEqual(err, values.err)))
+  })
+
+  describe('#rmrf', () => {
+    const files = ['foo', 'bar']
+    const listAllOk = directory =>
+      isValue('directory')(directory) || Promise.resolve(files)
+    const rmOk = path => Promise.resolve(path)
+    it('should remove all listed files and directories', () =>
+      rmrf(listAllOk, rmOk)(values.directory)
+        .then(removed => [...removed].sort())
+        .then(deepStrictEqualTo([...files, values.directory].sort())))
   })
 })
