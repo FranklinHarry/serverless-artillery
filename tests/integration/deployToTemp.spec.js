@@ -47,7 +47,10 @@ const values = ([
   'command',
   'options',
 ])
-  .reduce((result, key) => ({ [key]: { $: Symbol(key) }, ...result }), {})
+  .reduce(
+    (result, key) => Object.assign({ [key]: { $: Symbol(key) } }, result),
+    {}
+  )
 
 const strictEqualTo = expected => value => strictEqual(value, expected)
 
