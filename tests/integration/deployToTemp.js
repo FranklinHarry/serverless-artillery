@@ -1,6 +1,9 @@
 const { tmpdir } = require('os')
 const {
-  join, basename, sep, isAbsolute,
+  join,
+  basename,
+  sep,
+  isAbsolute,
 } = require('path')
 const childProcess = require('child_process')
 const fs = require('fs')
