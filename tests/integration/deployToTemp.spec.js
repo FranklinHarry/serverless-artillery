@@ -1,21 +1,23 @@
-const { assert: { strictEqual, deepStrictEqual, fail } } = require('chai')
+const {
+  assert: {
+    strictEqual, deepStrictEqual, fail, ok,
+  },
+} = require('chai')
 const { sep } = require('path')
+const os = require('os')
 
 const {
   pure: {
+    mkdir,
     mkdirp,
     ls,
     cp,
-    namesToFullPaths,
-    filterOutSpecFiles,
     findTargetSourceFiles,
-    sourceFileNameTo,
     copyTofolder,
     copyAll,
     writeFile,
     writeConfig,
     stageTarget,
-    execError,
     execAsync,
     deploy,
     tempLocation,
@@ -23,6 +25,8 @@ const {
     remove,
     listAbsolutePathsRecursively,
     rm,
+    rmdir,
+    rmAny,
     rmrf,
     removeTempDeployment,
     listTempDeployments,
@@ -73,6 +77,7 @@ const sequence = (functions) => {
   const expected = [...functions]
   const mock = name =>
     (...args) => {
+      ok(expected.length, `mock ${name} called after end of sequence`)
       const [expectedName, expectedArgs, returnValue] = expected.shift()
       deepStrictEqual([name, args], [expectedName, expectedArgs || []])
       return returnValue
@@ -88,16 +93,47 @@ const sequence = (functions) => {
 }
 
 describe('./tests/integration/deployToTemp', () => {
-  describe('#mkdirp', () => {
-    const expectedOptions = { recursive: true }
-    const mkdirOk = mockback([values.directory, expectedOptions])
-    const mkdirFail = mockback([values.directory, expectedOptions], values.err)
+  describe('#mkdir', () => {
+    const mkdirOk = mockback([values.directory])
+    const mkdirFail =
+      mockback([values.directory], values.err)
     it('should resolve empty on success', () =>
-      mkdirp(mkdirOk)(values.directory)
+      mkdir(mkdirOk)(values.directory)
         .then(missing))
     it('should resolve with the error on fail', () =>
-      mkdirp(mkdirFail)(values.directory)
+      mkdir(mkdirFail)(values.directory)
         .then(err => deepStrictEqual(err, values.err)))
+  })
+
+  describe('#mkdirp', () => {
+    const rootPath = os.type() === 'Windows_NT'
+      ? `c:${sep}`
+      : sep
+    const mkdirpWithMockSequence = (directory, mockSequence) => {
+      const mocks = sequence(mockSequence)
+      return mkdirp(mocks.mkdir)(directory)
+    }
+    it('should create progressive paths and resolve', () =>
+      mkdirpWithMockSequence(
+        `${rootPath}foo${sep}bar`,
+        [
+          ['mkdir', [`${rootPath}foo`], Promise.resolve()],
+          ['mkdir', [`${rootPath}foo${sep}bar`], Promise.resolve()],
+        ]).then(missing))
+    it('should resolve despite errors', () =>
+      mkdirpWithMockSequence(
+        `${rootPath}foo${sep}bar`,
+        [
+          ['mkdir', [`${rootPath}foo`], Promise.resolve(values.err)],
+          ['mkdir', [`${rootPath}foo${sep}bar`], Promise.resolve()],
+        ]).then(missing))
+    it('should resolve the final error', () =>
+      mkdirpWithMockSequence(
+        `${rootPath}foo${sep}bar`,
+        [
+          ['mkdir', [`${rootPath}foo`], Promise.resolve()],
+          ['mkdir', [`${rootPath}foo${sep}bar`], Promise.resolve(values.err)],
+        ]).then(isValue('err')))
   })
 
   describe('#ls', () => {
@@ -122,21 +158,6 @@ describe('./tests/integration/deployToTemp', () => {
         .then(err => deepStrictEqual(err, values.err)))
   })
 
-  describe('#namesToFullPaths', () => {
-    const directory = 'biz'
-    const names = ['foo', 'bar']
-    const expected = [`biz${sep}foo`, `biz${sep}bar`]
-    it('should join names to the base path', () =>
-      deepStrictEqual(namesToFullPaths(directory)(names), expected))
-  })
-
-  describe('#filterOutSpecFiles', () => {
-    const names = ['foo.js', 'foo.spec.js']
-    const expected = [names[0]]
-    it('should filter out spec files', () =>
-      deepStrictEqual(filterOutSpecFiles(names), expected))
-  })
-
   describe('#findTargetSourceFiles', () => {
     const sourcePath = 'foo'
     const names = ['bar.js', 'bar.spec.js']
@@ -145,14 +166,6 @@ describe('./tests/integration/deployToTemp', () => {
     it('should resolve to target source file full paths', () =>
       findTargetSourceFiles(lsOk, sourcePath)()
         .then(fullPaths => deepStrictEqual(fullPaths, expected)))
-  })
-
-  describe('#sourceFileNameTo', () => {
-    it('should re-root the source file path to the destination path', () =>
-      strictEqual(
-        sourceFileNameTo('foo')(`bar${sep}baz.js`),
-        `foo${sep}baz.js`
-      ))
   })
 
   describe('#copyTofolder', () => {
@@ -197,10 +210,15 @@ describe('./tests/integration/deployToTemp', () => {
   describe('#writeConfig', () => {
     const instanceId = 1234
     const expectedData = 'instanceId: 1234'
-    const writeFileOk = (destination, data) =>
-      deepStrictEqual([destination, data], [values.destination, expectedData])
+    const destination = 'foo'
+    const expectedDestination = `foo${sep}config.yml`
+    const writeFileOk = (actualDestination, data) =>
+      deepStrictEqual(
+        [actualDestination, data],
+        [expectedDestination, expectedData]
+      )
     it('should write the yaml instance id', () =>
-      writeConfig(writeFileOk)(values.destination, instanceId))
+      writeConfig(writeFileOk)(destination, instanceId))
   })
 
   describe('#stageTarget', () => {
@@ -229,34 +247,26 @@ describe('./tests/integration/deployToTemp', () => {
         .then(() => fail('should reject'), isValue('err')))
   })
 
-  describe('#execError', () => {
-    const err = { message: 'foo' }
-    const stderr = 'bar'
-    it('should include error message and stderr', () =>
-      strictEqual(execError(err, stderr).message, 'foo bar'))
-  })
-
   describe('#execAsync', () => {
     const execOk = mockback(
       [values.command, values.options],
       undefined, values.stdout
     )
+    const error = new Error('reasons')
+    const stderr = 'more reasons'
     const execFail = mockback(
       [values.command, values.options],
-      values.err, undefined, values.stderr
+      error, undefined, stderr
     )
     const execArgs = [values.command, values.options]
-    const expectedError = new Error()
-    const execErrorOk = (...args) =>
-      deepStrictEqual(args, [values.err, values.stderr]) || expectedError
     it('should resolve to stdout', () =>
       execAsync(execOk)(...execArgs)
         .then(isValue('stdout')))
     it('should reject on fail', () =>
-      execAsync(execFail, execErrorOk)(...execArgs)
+      execAsync(execFail)(...execArgs)
         .then(
           () => fail('should reject'),
-          err => strictEqual(err, expectedError)
+          err => strictEqual(err.message, 'reasons more reasons')
         ))
   })
 
@@ -277,9 +287,17 @@ describe('./tests/integration/deployToTemp', () => {
     const instanceId = '123'
     const root = 'abc'
     const destination = `abc${sep}123`
-    it('should join the root path and instance id', () =>
+    const randomInstanceId = '456'
+    const random = () => randomInstanceId
+    const randomDestination = `abc${sep}456`
+    it('should join the root path and the random instance id', () =>
       deepStrictEqual(
-        tempLocation(instanceId, root),
+        tempLocation(random, root)(),
+        { instanceId: randomInstanceId, destination: randomDestination }
+      ))
+    it('should join the root path and the supplied instance id', () =>
+      deepStrictEqual(
+        tempLocation(random, root)(instanceId),
         { instanceId, destination }
       ))
   })
@@ -289,7 +307,7 @@ describe('./tests/integration/deployToTemp', () => {
     const deployNewTargetWithMockSequence = (mockSequence) => {
       const mocks = sequence(mockSequence)
       return deployNewTarget(
-        values, // provides { instanceId, destination }
+        () => values, // provides { instanceId, destination }
         mocks.mkdirp,
         mocks.stageTarget,
         mocks.deploy,
@@ -304,6 +322,7 @@ describe('./tests/integration/deployToTemp', () => {
         ['stageTarget', [values.destination, values.instanceId], Promise.resolve()],
         ['log', ['deploying', values.destination]],
         ['deploy', [values.destination], Promise.resolve(values.stdout)],
+        ['log', [values.stdout]],
       ]).then(strictEqualTo(true)))
     it('should continue staging/deploying and resolve after failing to make dir', () =>
       deployNewTargetWithMockSequence([
@@ -312,6 +331,7 @@ describe('./tests/integration/deployToTemp', () => {
         ['stageTarget', [values.destination, values.instanceId], Promise.resolve()],
         ['log', ['deploying', values.destination]],
         ['deploy', [values.destination], Promise.resolve(values.stdout)],
+        ['log', [values.stdout]],
       ]).then(strictEqualTo(true)))
     it('should reject when failing to stage target', () =>
       deployNewTargetWithMockSequence([
@@ -393,13 +413,44 @@ describe('./tests/integration/deployToTemp', () => {
         .then(err => deepStrictEqual(err, values.err)))
   })
 
+  describe('#rmdir', () => {
+    const rmdirOk = mockback([values.directory])
+    const rmdirFail =
+      mockback([values.directory], values.err)
+    it('should resolve empty on success', () =>
+      rmdir(rmdirOk)(values.directory)
+        .then(missing))
+    it('should resolve with the error on fail', () =>
+      rmdir(rmdirFail)(values.directory)
+        .then(err => deepStrictEqual(err, values.err)))
+  })
+
+  describe('#rmAny', () => {
+    const givenDirectoryResolve = returnValue =>
+      arg =>
+        strictEqual(arg, values.directory) || Promise.resolve(returnValue)
+    const rmOk = givenDirectoryResolve(false)
+    const rmdirOk = givenDirectoryResolve(false)
+    const rmFail = givenDirectoryResolve(values.err)
+    const rmdirFail = givenDirectoryResolve(values.err)
+    it('should resolve removing file', () =>
+      rmAny(rmOk, rmdirFail)(values.directory)
+        .then(value => value === false))
+    it('should resolve removing directory', () =>
+      rmAny(rmFail, rmdirOk)(values.directory)
+        .then(value => value === false))
+    it('should resolve to error when remove file and directory fail', () =>
+      rmAny(rmFail, rmdirFail)(values.directory)
+        .then(isValue('err')))
+  })
+
   describe('#rmrf', () => {
     const files = ['foo', 'bar']
     const listAllOk = directory =>
       isValue('directory')(directory) || Promise.resolve(files)
-    const rmOk = path => Promise.resolve(path)
+    const rmAnyOk = path => Promise.resolve(path)
     it('should remove all listed files and directories', () =>
-      rmrf(listAllOk, rmOk)(values.directory)
+      rmrf(listAllOk, rmAnyOk)(values.directory)
         .then(removed => [...removed].sort())
         .then(deepStrictEqualTo([...files, values.directory].sort())))
   })
@@ -419,17 +470,21 @@ describe('./tests/integration/deployToTemp', () => {
       removeTempDeploymentWithMockSequence([
         ['log', ['removing temp deployment', values.directory]],
         ['remove', [values.directory], Promise.resolve(values.stdout)],
+        ['log', ['deleting', values.directory]],
         ['rmrf', [values.directory], Promise.resolve(values.directory)],
+        ['log', ['done']],
       ])
-        .then(isValue('directory')))
+        .then(missing))
     it('should warn and resolve on unsuccessful remove and rmrf', () =>
       removeTempDeploymentWithMockSequence([
         ['log', ['removing temp deployment', values.directory]],
         ['remove', [values.directory], Promise.reject(error)],
-        ['warn', ['failed to sls remove', values.directory, ':', error.stack]],
+        ['warn', ['failed to sls remove', values.directory]],
+        ['log', ['deleting', values.directory]],
         ['rmrf', [values.directory], Promise.resolve(values.directory)],
+        ['log', ['done']],
       ])
-        .then(isValue('directory')))
+        .then(missing))
   })
 
   describe('#listTempDeployments', () => {
@@ -457,7 +512,7 @@ describe('./tests/integration/deployToTemp', () => {
     it('should resolve after logging, listing and removing each deployment', () =>
       cleanupDeploymentsWithMockSequence([
         ['log', ['cleaning up deployments in', root]],
-        ['list', [], Promise.resolve(directories)],
+        ['list', [root], Promise.resolve(directories)],
         ['remove', ['foo'], Promise.resolve()],
         ['remove', ['bar'], Promise.resolve()],
       ]))

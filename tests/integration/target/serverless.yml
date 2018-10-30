@@ -12,7 +12,7 @@ provider:
          - "s3:PutObject"
          - "s3:GetObject"
          - "s3:DeleteObject"
-       Resource: "arn:aws:s3:::slsart-integration-target-reqs*"
+       Resource: "arn:aws:s3:::slsart-integration-target-${self:custom.instanceId}-reqs"
   usagePlan:
     throttle:
       burstLimit: 10
