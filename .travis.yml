@@ -1,12 +1,14 @@
 language: node_js
 node_js:
-  - "6"
-#  - "8"
+#  - "6"
+  - "8"
 #  - "8.10"
 #  - "10"
 before_script:
   - 'if [ "$NPM_VERSION" ]; then npm install -g npm@^$NPM_VERSION; fi'
+  - 'if [ "$ALT_VERSION" ]; then npm install -g $ALT_VERSION; fi'
   - 'npm --version'
+  - 'if [ "$ALT_VERSION" ]; then echo $ALT_VERSION; fi'
   - 'npm i -g serverless'
 after_success: npm run coverage
 
@@ -18,3 +20,4 @@ env:
   - NPM_VERSION=6.1.0
   - NPM_VERSION=6.0.1
   - NPM_VERSION=6.0.0
+  - ALT_VERSION=jtwebman:enoent-on-link-up
