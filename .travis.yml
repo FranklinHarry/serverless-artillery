@@ -4,11 +4,12 @@ node_js:
   - "8"
 #  - "8.10"
 #  - "10"
-before_script:
+before_install:
   - 'if [ "$NPM_VERSION" ]; then npm install -g npm@^$NPM_VERSION; fi'
   - 'if [ "$ALT_VERSION" ]; then npm install -g $ALT_VERSION; fi'
   - 'npm --version'
   - 'if [ "$ALT_VERSION" ]; then echo $ALT_VERSION; fi'
+before_script:
   - 'npm i -g serverless'
 after_success: npm run coverage
 
