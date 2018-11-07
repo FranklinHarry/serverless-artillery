@@ -15,10 +15,4 @@ after_success: npm run coverage
 
 env:
   - NPM_VERSION=6.4.1
-  - NPM_VERSION=6.4.0
-  - NPM_VERSION=6.3.0
-  - NPM_VERSION=6.2.0
-  - NPM_VERSION=6.1.0
-  - NPM_VERSION=6.0.1
-  - NPM_VERSION=6.0.0
-  - ALT_VERSION=jtwebman:enoent-on-link-up
+  - ALT_VERSION=jtwebman/enoent-on-link-up
