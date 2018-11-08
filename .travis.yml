@@ -17,5 +17,5 @@ env:
 #  - NPM_VERSION=6.4.1
 #  - NPM_VERSION=5.10.0
 #  - NPM_VERSION=5.8.0
-#  - NPM_VERSION=5.5.0
-  - ALT_VERSION=https://github.com/jtwebman/cli.git
+  - NPM_VERSION=5.6.0
+#  - ALT_VERSION=https://github.com/jtwebman/cli.git
