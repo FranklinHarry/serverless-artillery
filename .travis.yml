@@ -6,7 +6,7 @@ node_js:
 #  - "10"
 before_install:
   - 'if [ "$NPM_VERSION" ]; then npm install -g npm@^$NPM_VERSION; fi'
-  - 'if [ "$ALT_VERSION" ]; then mkdir npm; cd npm; git clone $ALT_VERSION; git checkout -b enoent-on-link-up origin/enoent-on-link-up; node . -g install; cd ..; fi'
+  - 'if [ "$ALT_VERSION" ]; then mkdir npm; cd npm; git clone $ALT_VERSION; git checkout -b enoent-on-link-up 52b5011d91e0e98ccdd10ab3063a2837d35dfadd; node . -g install; cd ..; fi'
   - 'npm --version'
   - 'if [ "$ALT_VERSION" ]; then echo $ALT_VERSION; fi'
 before_script:
