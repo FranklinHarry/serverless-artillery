@@ -6,7 +6,7 @@ node_js:
 #  - "10"
 before_install:
   - 'if [ "$NPM_VERSION" ]; then npm install -g npm@^$NPM_VERSION; fi'
-  - 'if [ "$ALT_VERSION" ]; then mkdir npm; cd npm; git clone $ALT_VERSION; git checkout enoent-on-link-up; node . install; cd ..; fi'
+  - 'if [ "$ALT_VERSION" ]; then mkdir npm; cd npm; git clone $ALT_VERSION; git checkout -b enoent-on-link-up origin/enoent-on-link-up; node . install; cd ..; fi'
   - 'npm --version'
   - 'if [ "$ALT_VERSION" ]; then echo $ALT_VERSION; fi'
 before_script:
@@ -14,8 +14,8 @@ before_script:
 after_success: npm run coverage
 
 env:
-  - NPM_VERSION=6.4.1
-  - NPM_VERSION=5.10.0
-  - NPM_VERSION=5.8.0
-  - NPM_VERSION=5.5.0
+#  - NPM_VERSION=6.4.1
+#  - NPM_VERSION=5.10.0
+#  - NPM_VERSION=5.8.0
+#  - NPM_VERSION=5.5.0
   - ALT_VERSION=https://github.com/npm/cli.git
